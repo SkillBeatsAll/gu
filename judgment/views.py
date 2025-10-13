@@ -70,5 +70,5 @@ def get_case(request):
     except PermissionDenied:
         raise
     except Exception as e:
-        logger.error("Something went wrong: %s" % (case_id, str(e)))
+        logger.error("Something went wrong with case_id %s: %s" % (case_id, str(e)))
         raise Http404

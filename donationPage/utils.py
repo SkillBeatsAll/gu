@@ -6,6 +6,7 @@ import smartypants
 from random import randint
 import os
 from urllib.parse import unquote
+import secrets
 
 
 import html
@@ -384,8 +385,8 @@ def make_donorUrl(date=None):
         date_string = date.strftime(output_format)
     else:
         date_string = datetime.now().strftime(output_format)
-    # Generate a random 36-digit number
-    url = str(random.randint(min_val, max_val))
+    # Generate a cryptographically secure random 36-digit number
+    url = str(secrets.randbelow(max_val - min_val + 1) + min_val)
 
     # Concatenate the random number and date
     url += date_string
