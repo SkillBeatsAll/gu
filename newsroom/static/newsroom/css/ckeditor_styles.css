@@ -49,6 +49,18 @@ body {
     font-size: 1.4rem;
 }
 
+h3 {
+    margin-top: 16px;
+    margin-bottom: 14px;
+    font-size: 1.2rem;
+}
+
+h4 {
+    margin-top: 16px;
+    margin-bottom: 14px;
+    font-size: 1.05rem;
+}
+
 .author-description {
     font-style: italic;
 }
