@@ -18,4 +18,6 @@ CKEDITOR.stylesSet.add( 'gu_styles', [
       attributes: { 'class': 'soundcloud'}},
     { name: 'Subheading', element: 'h2',
       attributes: { 'class': 'subheading' } },
+    { name: 'Subheading 2', element: 'h3' },
+    { name: 'Subheading 3', element: 'h4' },
 ] );
