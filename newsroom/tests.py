@@ -3,11 +3,19 @@ from decimal import *
 
 from bs4 import BeautifulSoup as bs
 from django.db import IntegrityError
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 from letters.models import Letter
 from newsroom import utils
-from newsroom.models import Article, Category, Topic, Author, Correction
+from newsroom.models import (
+    Article,
+    Category,
+    Topic,
+    Author,
+    Correction,
+    MostPopular,
+    MostDeeplyRead,
+)
 from republisher.models import Republisher, RepublisherArticle
 import republisher.management.commands.emailrepublishers as emailrepublishers
 import newsroom.management.commands.notifycorrections as notifycorrections
@@ -517,3 +525,351 @@ class CategoryTest(TestCase):
         category = Category.objects.create(name="Test Category", slug="test-category")
         self.assertEqual(str(category), category.name)
         self.assertEqual(category.get_absolute_url(), f"/category/{category.slug}/")
+
+
+####################################################################
+# JSON API tests: /api/most-popular/ and /api/most-deeply-read/
+#
+# Add these imports to the top of newsroom/tests.py if not present:
+#
+#   from django.test import Client, TestCase, override_settings
+#   from newsroom.models import MostPopular, MostDeeplyRead
+#   import datetime
+#   from django.urls import reverse
+#   from django.utils import timezone
+####################################################################
+
+
+class MostReadApiMixin:
+    """Shared tests for the two structurally identical endpoints.
+
+    MostPopular and MostDeeplyRead store the same thing -- newline-separated
+    "slug|title" rows in one TextField -- and differ only in the name of the
+    accessor. So the API contract is identical and the tests can be too.
+
+    Subclasses supply `model`, `url_name` and `get_list`. Deliberately not a
+    TestCase subclass, so the runner doesn't collect it on its own.
+    """
+
+    model = None
+    url_name = None
+
+    def get_list(self):
+        """Call the model's list accessor (named differently on each model)."""
+        raise NotImplementedError
+
+    # -- helpers ----------------------------------------------------
+
+    def store(self, article_list):
+        """Create a record holding the given raw article_list text."""
+        obj = self.model()
+        obj.article_list = article_list
+        obj.save()
+        return obj
+
+    def get_json(self):
+        response = self.client.get(reverse(self.url_name))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
+        return response.json()
+
+    def setUp(self):
+        self.client = Client()
+
+    # -- accessors behave as the API assumes ------------------------
+
+    def test_accessor_returns_none_when_no_record(self):
+        """The model returns None, not [], when the cron has never run."""
+        self.assertIsNone(self.get_list())
+
+    def test_accessor_splits_rows_and_fields(self):
+        self.store("slug-a|Title A\nslug-b|Title B")
+        self.assertEqual(
+            self.get_list(),
+            [["slug-a", "Title A"], ["slug-b", "Title B"]],
+        )
+
+    # -- empty / missing data ---------------------------------------
+
+    def test_no_record_returns_empty_list(self):
+        """No MostPopular/MostDeeplyRead row at all -> 200 with an empty list.
+
+        Note this is indistinguishable from a genuinely empty list. See the
+        `generated` suggestion in the notes if consumers need to tell them
+        apart.
+        """
+        data = self.get_json()
+        self.assertEqual(data["count"], 0)
+        self.assertEqual(data["articles"], [])
+
+    def test_record_with_empty_article_list(self):
+        """A saved-but-empty record.
+
+        "".split("\\n") is [""], so the accessor returns [[""]] -- one row of
+        one empty string, not []. This is what makes get_most_popular_html()
+        fall into its bare `except` (MostPopular only; the MostDeeplyRead
+        version guards with len(article) >= 2). The API must filter it.
+        """
+        self.store("")
+        self.assertEqual(self.get_list(), [[""]])
+        data = self.get_json()
+        self.assertEqual(data["count"], 0)
+        self.assertEqual(data["articles"], [])
+
+    # -- happy path -------------------------------------------------
+
+    def test_returns_stored_articles_in_order(self):
+        """Rank order is the stored order and must be preserved."""
+        self.store("slug-a|Title A\nslug-b|Title B\nslug-c|Title C")
+        data = self.get_json()
+        self.assertEqual(data["count"], 3)
+        self.assertEqual(
+            [a["slug"] for a in data["articles"]],
+            ["slug-a", "slug-b", "slug-c"],
+        )
+        self.assertEqual(
+            [a["title"] for a in data["articles"]],
+            ["Title A", "Title B", "Title C"],
+        )
+
+    def test_urls_are_absolute_and_match_reverse(self):
+        self.store("slug-a|Title A")
+        article = self.get_json()["articles"][0]
+        expected_path = reverse("newsroom:article.detail", args=["slug-a"])
+        self.assertEqual(article["url"], "http://testserver" + expected_path)
+        self.assertTrue(article["url"].startswith("http://"))
+
+    def test_keys_are_exactly_as_documented(self):
+        """Guard against accidentally widening or narrowing the payload."""
+        self.store("slug-a|Title A")
+        data = self.get_json()
+        self.assertEqual(set(data.keys()), {"count", "articles"})
+        self.assertEqual(set(data["articles"][0].keys()), {"slug", "title", "url"})
+
+    # -- malformed rows ---------------------------------------------
+
+    def test_trailing_newline_does_not_produce_empty_entry(self):
+        """The management commands use "\\n".join, but a stray trailing
+        newline (hand-edited via admin, say) yields a final [''] row."""
+        self.store("slug-a|Title A\n")
+        self.assertEqual(self.get_list(), [["slug-a", "Title A"], [""]])
+        data = self.get_json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["articles"][0]["slug"], "slug-a")
+
+    def test_row_without_pipe_is_skipped(self):
+        """A row with no separator has no title; reverse() would still build
+        a URL, so it must be dropped explicitly rather than emitted."""
+        self.store("slug-a|Title A\nbroken-row-no-pipe\nslug-b|Title B")
+        data = self.get_json()
+        self.assertEqual(data["count"], 2)
+        self.assertEqual([a["slug"] for a in data["articles"]], ["slug-a", "slug-b"])
+
+    def test_blank_slug_is_skipped(self):
+        self.store("|Title with no slug\nslug-b|Title B")
+        data = self.get_json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["articles"][0]["slug"], "slug-b")
+
+    def test_blank_title_is_skipped(self):
+        self.store("slug-a|\nslug-b|Title B")
+        data = self.get_json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["articles"][0]["slug"], "slug-b")
+
+    def test_pipe_in_title_is_preserved(self):
+        """item.split("|") splits on every pipe, so a title containing one
+        arrives as 3+ parts. The API rejoins; get_*_html() truncates."""
+        self.store("slug-a|Cape Town | Water crisis")
+        self.assertEqual(self.get_list(), [["slug-a", "Cape Town ", " Water crisis"]])
+        data = self.get_json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["articles"][0]["title"], "Cape Town | Water crisis")
+
+    def test_whitespace_is_stripped(self):
+        self.store("  slug-a  |  Title A  ")
+        article = self.get_json()["articles"][0]
+        self.assertEqual(article["slug"], "slug-a")
+        self.assertEqual(article["title"], "Title A")
+
+    def test_windows_line_endings_are_not_silently_accepted(self):
+        r"""Documents current behaviour: the accessor splits on "\n" only, so
+        a \r\n-delimited list leaves \r glued to the previous title. The strip()
+        in the API removes it. If this ever regresses, titles will end in \r."""
+        self.store("slug-a|Title A\r\nslug-b|Title B")
+        data = self.get_json()
+        self.assertEqual(data["count"], 2)
+        self.assertEqual(data["articles"][0]["title"], "Title A")
+
+    # -- which record is served -------------------------------------
+
+    def test_latest_record_wins(self):
+        """Both accessors use .latest("modified"). Every cron run inserts a
+        new row rather than updating, so the table grows and only the newest
+        row should ever be served."""
+        old = self.store("old-slug|Old title")
+        new = self.store("new-slug|New title")
+
+        # `modified` is auto_now=True, so save() would overwrite whatever we
+        # set. QuerySet.update() bypasses field pre_save and lets us force an
+        # unambiguous gap rather than relying on clock resolution.
+        self.model.objects.filter(pk=old.pk).update(
+            modified=timezone.now() - datetime.timedelta(days=2)
+        )
+        self.model.objects.filter(pk=new.pk).update(modified=timezone.now())
+
+        data = self.get_json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["articles"][0]["slug"], "new-slug")
+
+    def test_older_records_are_not_merged_in(self):
+        old = self.store("a|A\nb|B\nc|C")
+        new = self.store("d|D")
+        self.model.objects.filter(pk=old.pk).update(
+            modified=timezone.now() - datetime.timedelta(days=2)
+        )
+        self.assertEqual(self.model.objects.count(), 2)
+        self.assertEqual(self.get_json()["count"], 1)
+
+    # -- access control ---------------------------------------------
+
+    def test_anonymous_access_is_allowed(self):
+        """The point of the endpoint: no auth, no redirect to a login page."""
+        self.store("slug-a|Title A")
+        response = self.client.get(reverse(self.url_name))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Location", response)
+
+    def test_authenticated_response_is_identical(self):
+        """Nothing is user-specific, which is why plain cache_page is safe
+        here instead of the site's cache_except_staff wrapper."""
+        self.store("slug-a|Title A")
+        anonymous = self.get_json()
+
+        User.objects.create_user(
+            username="staffer",
+            password="pw",
+            email="s@example.com",
+            is_staff=True,
+        )
+        self.client.login(username="staffer", password="pw")
+        self.assertEqual(self.get_json(), anonymous)
+
+    def test_head_is_allowed(self):
+        self.store("slug-a|Title A")
+        response = self.client.head(reverse(self.url_name))
+        self.assertEqual(response.status_code, 200)
+
+    # -- staleness --------------------------------------------------
+
+    def test_slug_of_deleted_article_is_still_returned(self):
+        """Documents a real limitation rather than asserting desired
+        behaviour: the stored list is a snapshot of slugs and titles, never
+        re-validated against Article. If an article is deleted or unpublished
+        after the cron ran, the endpoint keeps advertising it and the URL
+        404s. Change this test if you add a published-articles filter.
+        """
+        self.store("no-such-article|Vanished")
+        data = self.get_json()
+        self.assertEqual(data["count"], 1)
+        detail = self.client.get(data["articles"][0]["url"])
+        self.assertEqual(detail.status_code, 404)
+
+
+# `cache_page` is applied in urls.py, and the project's default cache is a
+# FileBasedCache in /var/tmp/django_cache with KEY_PREFIX "gu" -- a real
+# directory that persists between test runs. Without this override, a response
+# cached by one test is served to the next (and to tomorrow's run), and every
+# test above that changes the stored list then re-requests the URL fails
+# confusingly. DummyCache makes cache_page a no-op.
+DISABLE_CACHE = override_settings(
+    CACHES={"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+)
+
+
+@DISABLE_CACHE
+class MostPopularApiTest(MostReadApiMixin, TestCase):
+    model = MostPopular
+    url_name = "newsroom:api.most_popular"
+
+    def get_list(self):
+        return MostPopular.get_most_popular_list()
+
+    def test_endpoint_path(self):
+        self.assertEqual(reverse(self.url_name), "/api/most-popular/")
+
+
+@DISABLE_CACHE
+class MostDeeplyReadApiTest(MostReadApiMixin, TestCase):
+    model = MostDeeplyRead
+    url_name = "newsroom:api.most_deeply_read"
+
+    def get_list(self):
+        # Note the shorter, inconsistent accessor name on this model.
+        return MostDeeplyRead.get_list()
+
+    def test_endpoint_path(self):
+        self.assertEqual(reverse(self.url_name), "/api/most-deeply-read/")
+
+
+@DISABLE_CACHE
+class MostReadApiIntegrationTest(TestCase):
+    """One end-to-end check that a URL built by the API actually resolves to a
+    live article page, and that the two endpoints stay independent."""
+
+    @classmethod
+    def setUpTestData(cls):
+        category = Category()
+        category.name = "News"
+        category.slug = "news"
+        category.save()
+
+        article = Article()
+        article.title = "Cape Town water crisis deepens"
+        article.body = "<p>Test body.</p>"
+        article.slug = "cape-town-water-crisis_9999"
+        article.category = category
+        article.save()
+        article.publish_now()
+        cls.article = article
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_url_resolves_to_the_real_article(self):
+        popular = MostPopular()
+        popular.article_list = self.article.slug + "|" + self.article.title
+        popular.save()
+
+        data = self.client.get(reverse("newsroom:api.most_popular")).json()
+        self.assertEqual(data["count"], 1)
+
+        entry = data["articles"][0]
+        self.assertEqual(entry["slug"], self.article.slug)
+        self.assertEqual(entry["title"], self.article.title)
+
+        detail = self.client.get(entry["url"])
+        self.assertEqual(detail.status_code, 200)
+
+    def test_endpoints_read_separate_tables(self):
+        popular = MostPopular()
+        popular.article_list = "popular-slug|Popular"
+        popular.save()
+
+        deeply = MostDeeplyRead()
+        deeply.article_list = "deep-slug|Deep"
+        deeply.save()
+
+        popular_data = self.client.get(reverse("newsroom:api.most_popular")).json()
+        deep_data = self.client.get(reverse("newsroom:api.most_deeply_read")).json()
+
+        self.assertEqual(popular_data["articles"][0]["slug"], "popular-slug")
+        self.assertEqual(deep_data["articles"][0]["slug"], "deep-slug")
+
+    def test_populating_one_does_not_populate_the_other(self):
+        popular = MostPopular()
+        popular.article_list = "popular-slug|Popular"
+        popular.save()
+
+        deep_data = self.client.get(reverse("newsroom:api.most_deeply_read")).json()
+        self.assertEqual(deep_data["count"], 0)
