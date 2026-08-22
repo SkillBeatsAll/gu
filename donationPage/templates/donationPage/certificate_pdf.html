@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Donation Receipt {{ certificate.receipt_number|default:"" }}</title>
+    <style>
+      @page { size: A4; margin: 0; }
+      * { box-sizing: border-box; }
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        color: #1a1a1a;
+        font-size: 17px;
+        line-height: 1.55;
+      }
+      .page {
+        height: 100%;
+        padding: 24mm 22mm 26mm;
+      }
+      table.layout { width: 100%; height: 100%; border-collapse: collapse; }
+      table.layout > tbody > tr > td { padding: 0; }
+      td.body-cell { vertical-align: top; height: 100%; }
+      td.foot-cell { vertical-align: bottom; }
+
+      /* Header */
+      .header { width: 100%; }
+      .header img { width: 290px; display: block; margin-left: auto; }
+      .header .addr {
+        text-align: right;
+        font-size: 13px;
+        line-height: 1.7;
+        margin-top: 12px;
+        color: #2b2b2b;
+        white-space: nowrap;
+      }
+      .header .addr a { color: #00b1f0; text-decoration: none; }
+      .header .reg {
+        text-align: right;
+        font-size: 13px;
+        font-weight: bold;
+        margin-top: 10px;
+        white-space: nowrap;
+      }
+
+      /* Title row */
+      .title-row {
+        margin-top: 70px;
+        width: 100%;
+        font-size: 18px;
+      }
+      .title-row td { vertical-align: top; }
+      .title-row .left { text-align: left; }
+      .title-row .right { text-align: right; }
+
+      p.para { margin: 30px 0; }
+
+      /* Donor details */
+      table.details { width: 100%; border-collapse: collapse; margin: 36px 0; }
+      table.details td { padding: 7px 0; vertical-align: top; }
+      table.details td.label {
+        width: 40%;
+        text-transform: uppercase;
+        white-space: nowrap;
+        padding-right: 16px;
+      }
+      table.details td.value a { color: #00b1f0; text-decoration: none; }
+      .group-gap td { padding-top: 22px; }
+
+      /* Signature — sits in the bottom-aligned footer cell */
+      .sig-img { height: 80px; margin-bottom: 6px; }
+      table.sig { width: 100%; border-collapse: collapse; }
+      table.sig td.right { text-align: right; }
+      .sig-title { margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <table class="layout">
+        <tr><td class="body-cell">
+
+      <!-- header -->
+      <div class="header">
+        {% if logo_uri %}<img src="{{ logo_uri }}" alt="GroundUp">{% endif %}
+        <div class="addr">
+          {% for line in pbo.address_lines %}{{ line }}<br>{% endfor %}
+          <a href="https://{{ pbo.website }}">{{ pbo.website }}</a> | {{ pbo.phone }}
+        </div>
+        <div class="reg">{{ pbo.registration }}</div>
+      </div>
+
+      <!-- title -->
+      <table class="title-row">
+        <tr>
+          <td class="left">DONATION RECEIPT</td>
+          <td class="right">RECEIPT NO: {{ certificate.receipt_number|default:"—" }}</td>
+        </tr>
+      </table>
+
+      <p class="para">
+        Issued in terms of Section 18A of the Income Tax Act of 1962. The donation
+        received below will be used exclusively for the objects of {{ pbo.name }} in
+        carrying out PBAs approved in terms of Section 18A.
+      </p>
+
+      <!-- donor details -->
+      <table class="details">
+        <tr>
+          <td class="label">Name of donor</td>
+          <td class="value">{{ certificate.donor_name }}</td>
+        </tr>
+        {% if certificate.show_trading_name %}
+        <tr>
+          <td class="label">Trading name</td>
+          <td class="value">{{ certificate.trading_name }}</td>
+        </tr>
+        {% endif %}
+        {% if certificate.nature_of_donor %}
+        <tr class="group-gap">
+          <td class="label">Nature of donor</td>
+          <td class="value">{{ certificate.get_nature_of_donor_display }}</td>
+        </tr>
+        {% endif %}
+        {% if certificate.id_number %}
+        <tr>
+          <td class="label">{{ certificate.get_id_type_display|default:"Identification / registration number" }}</td>
+          <td class="value">{{ certificate.id_number }}</td>
+        </tr>
+        {% endif %}
+        {% if certificate.needs_id_country and certificate.id_country %}
+        <tr>
+          <td class="label">Country of issue</td>
+          <td class="value">{{ certificate.id_country }}</td>
+        </tr>
+        {% endif %}
+        {% if certificate.date_of_birth %}
+        <tr>
+          <td class="label">Date of birth</td>
+          <td class="value">{{ certificate.date_of_birth|date:"j F Y" }}</td>
+        </tr>
+        {% endif %}
+        {% if certificate.income_tax_ref %}
+        <tr>
+          <td class="label">Income tax reference number</td>
+          <td class="value">{{ certificate.income_tax_ref }}</td>
+        </tr>
+        {% endif %}
+
+        {% if certificate.contact_number %}
+        <tr class="group-gap">
+          <td class="label">Contact number</td>
+          <td class="value">{{ certificate.contact_number }}</td>
+        </tr>
+        {% endif %}
+        {% if certificate.contact_email %}
+        <tr {% if not certificate.contact_number %}class="group-gap"{% endif %}>
+          <td class="label">Contact email</td>
+          <td class="value"><a href="mailto:{{ certificate.contact_email }}">{{ certificate.contact_email }}</a></td>
+        </tr>
+        {% endif %}
+        {% if certificate.address %}
+        <tr {% if not certificate.contact_number and not certificate.contact_email %}class="group-gap"{% endif %}>
+          <td class="label">Address of donor</td>
+          <td class="value">{{ certificate.address|linebreaksbr }}</td>
+        </tr>
+        {% endif %}
+
+        <tr class="group-gap">
+          <td class="label">Total amount of donation</td>
+          <td class="value">{{ certificate.amount_display }}</td>
+        </tr>
+        <tr>
+          <td class="label">Nature of donation</td>
+          <td class="value">{{ certificate.nature_of_donation }}</td>
+        </tr>
+        {% if certificate.date_of_donation_text %}
+        <tr>
+          <td class="label">Date of donation</td>
+          <td class="value">{{ certificate.date_of_donation_text }}</td>
+        </tr>
+        {% endif %}
+      </table>
+
+      <p class="para">
+        I confirm that the above donation was received by {{ pbo.name }} and will be
+        used exclusively for the objects of conducting a public benefit activity
+        approved by the Minister of Finance in Part II of the Ninth Schedule to the
+        Income Tax Act, 1962.
+      </p>
+
+        </td></tr>
+        <tr><td class="foot-cell">
+
+      <!-- signature, sitting at the bottom of the page -->
+      {% if signature_uri %}<img class="sig-img" src="{{ signature_uri }}" alt="Signature">{% endif %}
+      <table class="sig">
+        <tr>
+          <td class="left">{{ certificate.signatory_name }}</td>
+          <td class="right">{% if certificate.signatory_date %}{{ certificate.signatory_date|date:"j F Y" }}{% endif %}</td>
+        </tr>
+      </table>
+      <div class="sig-title">{{ certificate.signatory_title }}</div>
+
+        </td></tr>
+      </table>
+    </div>
+  </body>
+</html>
