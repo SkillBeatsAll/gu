@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %} | New S18A Certificate{% endblock %}
+
+{% block content %}
+  <div class="container" style="max-width:900px; margin:0 auto; padding:30px 15px 60px;">
+    <p><a href="{% url 's18a.staff.list' %}">&larr; All certificates</a></p>
+    <h1>New tax certificate</h1>
+    <p class="text-muted">
+      Generate a certificate manually. Pick an existing donor to snapshot their saved
+      details, or leave the donor blank and enter a fully custom donor / organisation.
+      A receipt number is allocated when you approve the certificate.
+    </p>
+
+    {% if messages %}{% for message in messages %}
+      <div class="alert alert-info">{{ message }}</div>
+    {% endfor %}{% endif %}
+
+    <div class="panel panel-default">
+      <div class="panel-body">
+        {% include "donationPage/staff/_certificate_fields.html" %}
+      </div>
+    </div>
+  </div>
+{% endblock %}

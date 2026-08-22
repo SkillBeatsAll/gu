@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %} | S18A Certificate{% endblock %}
+
+{% block content %}
+  <div class="container" style="max-width:900px; margin:0 auto; padding:30px 15px 60px;">
+    <p><a href="{% url 's18a.staff.list' %}">&larr; All certificates</a></p>
+
+    <h1>
+      Certificate
+      {% if certificate.receipt_number %}#{{ certificate.receipt_number }}{% endif %}
+      &mdash; {{ certificate.donor_name }}
+    </h1>
+
+    <p>
+      <span class="label
+        {% if certificate.status == 'approved' %}label-success
+        {% elif certificate.status == 'emailed' %}label-primary
+        {% elif certificate.status == 'rejected' %}label-danger
+        {% else %}label-warning{% endif %}" style="font-size:90%;">
+        {{ certificate.get_status_display }}
+      </span>
+      {% if certificate.requested_by_donor %}
+        <span class="text-muted">&nbsp;Requested by donor on {{ certificate.requested_at|date:"j M Y" }}</span>
+      {% endif %}
+      {% if certificate.approved_at %}
+        <span class="text-muted">&nbsp;Approved {{ certificate.approved_at|date:"j M Y" }}{% if certificate.approved_by %} by {{ certificate.approved_by }}{% endif %}</span>
+      {% endif %}
+      {% if certificate.emailed_at %}
+        <span class="text-muted">&nbsp;Emailed {{ certificate.emailed_at|date:"j M Y H:i" }}</span>
+      {% endif %}
+    </p>
+
+    {% if messages %}{% for message in messages %}
+      <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>
+    {% endfor %}{% endif %}
+
+    {% if duplicates %}
+      <div class="alert alert-warning">
+        <strong>Possible duplicate.</strong>
+        This donor already has another certificate for the {{ certificate.tax_year }} tax year:
+        {% for dup in duplicates %}
+          <a href="{% url 's18a.staff.detail' dup.pk %}">#{{ dup.receipt_number|default:dup.pk }}</a>
+          ({{ dup.get_status_display }}){% if not forloop.last %}, {% endif %}
+        {% endfor %}.
+        Check before issuing a second receipt for the same donations.
+      </div>
+    {% endif %}
+
+    <!-- workflow actions -->
+    <div class="panel panel-default">
+      <div class="panel-heading"><strong>Actions</strong></div>
+      <div class="panel-body" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+        <a href="{% url 's18a.staff.pdf' certificate.pk %}" target="_blank" class="btn btn-default" style="margin-right:8px;">Preview PDF</a>
+        <a href="{% url 's18a.staff.pdf' certificate.pk %}?download=1" class="btn btn-default" style="margin-right:8px;">Download PDF</a>
+
+        {% if certificate.status == 'pending' %}
+          <form method="post" action="{% url 's18a.staff.approve' certificate.pk %}" style="display:inline; margin-right:8px;"
+                onsubmit="return confirm('Approve this certificate? It will be allocated a receipt number. Nothing is emailed until you send it.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success">Approve</button>
+          </form>
+        {% endif %}
+
+        {% if certificate.is_approved %}
+          <a href="{% url 's18a.staff.email' certificate.pk %}"
+             class="btn btn-primary" style="margin-right:8px;">
+            {% if certificate.status == 'emailed' %}Re-send email{% else %}Email to donor{% endif %}
+          </a>
+        {% endif %}
+
+        {% if certificate.status == 'pending' %}
+          <button type="button" class="btn btn-danger" onclick="document.getElementById('reject-box').style.display='block';">Reject</button>
+        {% endif %}
+      </div>
+
+      {% if certificate.status == 'pending' %}
+      <div id="reject-box" class="panel-body" style="display:none; border-top:1px solid #eee;">
+        <form method="post" action="{% url 's18a.staff.reject' certificate.pk %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label>Reason for rejection (optional)</label>
+            <textarea name="reason" class="form-control" rows="2"></textarea>
+          </div>
+          <button type="submit" class="btn btn-danger">Confirm rejection</button>
+        </form>
+      </div>
+      {% endif %}
+
+      {% if certificate.rejection_reason %}
+        <div class="panel-body" style="border-top:1px solid #eee;">
+          <strong>Rejection reason:</strong> {{ certificate.rejection_reason }}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- editable details -->
+    <div class="panel panel-default">
+      <div class="panel-heading"><strong>Certificate details</strong></div>
+      <div class="panel-body">
+        {% include "donationPage/staff/_certificate_fields.html" %}
+      </div>
+    </div>
+  </div>
+{% endblock %}

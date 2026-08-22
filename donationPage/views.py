@@ -5,18 +5,25 @@ import requests
 import logging
 from datetime import datetime
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, Http404
 from django.template import loader
+from django.template.loader import render_to_string
 from django.core.paginator import Paginator
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMultiAlternatives
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.utils import timezone
+from django.utils.html import strip_tags
 from django.urls import reverse
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
-from .models import Donor, Donation, Subscription, Currency
-from .forms import DonorForm, PayfastPaymentForm
+from .models import Donor, Donation, Subscription, Currency, S18ACertificate
+from .forms import (DonorForm, PayfastPaymentForm, CertificateRequestForm,
+                    StaffCertificateForm, CertificateEmailForm)
+from .pdf import certificate_filename, certificate_pdf_bytes
+from . import sars
+from . import settings as donation_settings
 from donationPage.utils import make_donorUrl
 
 signer = TimestampSigner()
@@ -136,6 +143,8 @@ def donor_dashboard_view(request, token):
         donations_page_obj = paginator.get_page(page_number)
         subscriptions = Subscription.objects.filter(donor=donor).order_by("-created_at")
         has_active_subscription = subscriptions.filter(status='active').exists()
+        certificates = S18ACertificate.objects.filter(donor=donor)
+        can_request_certificate = bool(S18ACertificate.available_tax_years(donor))
 
         if request.method == "POST":
             donor_form = DonorForm(request.POST)
@@ -156,7 +165,9 @@ def donor_dashboard_view(request, token):
             'donor_form': donor_form,
             'token': token,
             'payfast_return_url': settings.PAYFAST_RETURN_URL,
-            'has_active_subscription': has_active_subscription
+            'has_active_subscription': has_active_subscription,
+            'certificates': certificates,
+            'can_request_certificate': can_request_certificate,
         })
         if refresh_cookie:
             _attach_remember_cookie(response, donor.donor_url)
@@ -445,3 +456,375 @@ def donor_dashboard_logout(request):
         "You have been logged out on this device."
     )
     return response
+
+
+## S18A tax certificates
+
+def _certificate_pdf_response(certificate, download=True):
+    pdf = certificate_pdf_bytes(certificate)
+    response = HttpResponse(pdf, content_type='application/pdf')
+    disposition = 'attachment' if download else 'inline'
+    response['Content-Disposition'] = '{}; filename="{}"'.format(
+        disposition, certificate_filename(certificate))
+    return response
+
+
+def standard_certificate_email(certificate):
+    """The standard (subject, body) for the donor email - also used to
+    prefill the customisable version, so staff start from the same wording."""
+    body = render_to_string('donationPage/email/certificate_email_body.txt',
+                            {'certificate': certificate}).strip()
+    return donation_settings.EMAIL_SUBJECT, body
+
+
+def send_certificate_email(certificate, subject=None, body=None):
+    """Email the certificate PDF to the donor. returns (sent, error).
+
+    ``subject`` and ``body`` default to the standard template - the staff
+    email page passes in edited text for a one-off custom message.
+    """
+    recipient = certificate.contact_email
+    if not recipient:
+        return False, "This certificate has no donor email address."
+    standard_subject, standard_body = standard_certificate_email(certificate)
+    subject = subject or standard_subject
+    body = body or standard_body
+    try:
+        pdf = certificate_pdf_bytes(certificate)
+        html = render_to_string('donationPage/email/certificate_email.html',
+                                {'certificate': certificate, 'body': body})
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[recipient],
+        )
+        email.attach_alternative(html, "text/html")
+        email.attach(certificate_filename(certificate), pdf, 'application/pdf')
+        email.send()
+    except Exception as e:
+        logger.error("Failed to email S18A certificate %s: %s",
+                     certificate.pk, e)
+        return False, str(e)
+
+    certificate.mark_emailed()
+    return True, ""
+
+
+#  donor-facing 
+
+def certificate_request_view(request, token):
+    """Donor requests an S18A certificate for a tax year. reuses the
+    signed dashboard token so there's no login needed."""
+    try:
+        donor_url = signer.unsign(token, max_age=86400)
+    except (BadSignature, SignatureExpired):
+        return HttpResponse("Invalid or expired link.", status=400)
+
+    donor = get_object_or_404(Donor, donor_url=donor_url)
+    tax_years = S18ACertificate.available_tax_years(donor)
+
+    if not tax_years:
+        messages.add_message(
+            request, messages.WARNING,
+            "We have no completed donations on record for you yet, so there is "
+            "nothing to issue a tax certificate for.")
+        return redirect('donor_dashboard', token=token)
+
+    if request.method == 'POST':
+        form = CertificateRequestForm(request.POST, instance=donor,
+                                      tax_years=tax_years)
+        if form.is_valid():
+            # persist the SARS details back onto the donor so we can reuse them
+            donor = form.save()
+            year = int(form.cleaned_data['tax_year'])
+
+            certificate = S18ACertificate(requested_by_donor=True)
+            certificate.snapshot_from_donor(donor)
+            donations = certificate.build_from_tax_year(donor, year)
+
+            duplicate_of = S18ACertificate.objects.filter(
+                donor=donor, tax_year=year).exclude(
+                    status=S18ACertificate.STATUS_REJECTED).first()
+            if duplicate_of:
+                certificate.staff_notes = (
+                    "Possible duplicate of certificate #{} ({}).".format(
+                        duplicate_of.pk, duplicate_of.get_status_display()))
+
+            certificate.save()
+            certificate.donations.set(donations)
+
+            _notify_staff_of_request(request, certificate, duplicate_of)
+            messages.add_message(
+                request, messages.SUCCESS,
+                "Your tax certificate request has been submitted. Our team will "
+                "review it and email your certificate once approved.")
+            return redirect('donor_dashboard', token=token)
+    else:
+        form = CertificateRequestForm(instance=donor, tax_years=tax_years)
+
+    return render(request, 'donationPage/certificate_request.html', {
+        'form': form,
+        'donor': donor,
+        'token': token,
+    })
+
+
+def _notify_staff_of_request(request, certificate, duplicate_of=None):
+    try:
+        subject = "New S18A certificate request - {}".format(
+            certificate.donor_name)
+        if duplicate_of:
+            subject = "[possible duplicate] " + subject
+        message = render_to_string(
+            'donationPage/email/certificate_request_staff.html',
+            {'certificate': certificate,
+             'duplicate_of': duplicate_of,
+             'detail_url': request.build_absolute_uri(
+                 certificate.get_absolute_url())})
+        send_mail(subject, strip_tags(message), settings.DEFAULT_FROM_EMAIL,
+                  donation_settings.STAFF_EMAILS, html_message=message)
+    except Exception as e:
+        logger.error("Failed to notify staff of S18A request: %s", e)
+
+
+def donor_certificate_pdf(request, pk, token):
+    """lets a donor download their own approved certificate, using the
+    same signed dashboard token as donor_dashboard_view."""
+    try:
+        donor_url = signer.unsign(token, max_age=86400)
+    except (BadSignature, SignatureExpired):
+        return HttpResponse("Invalid or expired link.", status=400)
+
+    donor = get_object_or_404(Donor, donor_url=donor_url)
+    certificate = get_object_or_404(S18ACertificate, pk=pk, donor=donor)
+    # never expose a draft - it has no receipt number yet and could still change.
+    if not certificate.is_approved:
+        raise Http404
+    return _certificate_pdf_response(certificate, download=True)
+
+
+# saff-facing
+
+def _require_staff(request):
+    if not request.user.has_perm("donationPage.change_s18acertificate"):
+        raise Http404
+
+
+def _requested_tax_year(request):
+    """the tax_year filter as an int, or None - validated here because it
+    ends up interpolated into the export's filename."""
+    raw = request.GET.get('tax_year', '')
+    return int(raw) if raw.isdigit() else None
+
+
+def _filtered_certificates(request):
+    """The certificates matching the list page's filters"""
+    certificates = S18ACertificate.objects.select_related('donor')
+    status = request.GET.get('status', '')
+    if status:
+        certificates = certificates.filter(status=status)
+    year = _requested_tax_year(request)
+    if year:
+        certificates = certificates.filter(tax_year=year)
+    return certificates
+
+
+@login_required
+def staff_certificate_list(request):
+    _require_staff(request)
+    paginator = Paginator(_filtered_certificates(request), 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'donationPage/staff/certificate_list.html', {
+        'page_obj': page_obj,
+        'status': request.GET.get('status', ''),
+        'status_choices': S18ACertificate.STATUS_CHOICES,
+        'tax_year': _requested_tax_year(request),
+        'tax_years': S18ACertificate.objects.exclude(
+            tax_year=None).values_list(
+                'tax_year', flat=True).distinct().order_by('-tax_year'),
+    })
+
+
+@login_required
+def staff_certificate_csv(request):
+    """Export the filtered certificates in the SARS submission layout.
+
+    only issued receipts get exported - a draft has no receipt number, so
+    it's not something SARS has been told about anyway.
+    """
+    _require_staff(request)
+    certificates = _filtered_certificates(request).filter(
+        status__in=(S18ACertificate.STATUS_APPROVED,
+                    S18ACertificate.STATUS_EMAILED),
+        receipt_number__isnull=False).order_by('receipt_number')
+
+    year = _requested_tax_year(request)
+    filename = "groundup-s18a-{}.csv".format(year or "all")
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="{}"'.format(
+        filename)
+    # excel only reads a csv as utf-8 if it starts with the byte-order mark.
+    response.write('\ufeff')
+    sars.write(certificates, response)
+    return response
+
+
+@login_required
+def staff_certificate_create(request):
+    _require_staff(request)
+    # optionally prefill from an existing donor + tax year.
+    donor = None
+    donor_id = request.GET.get('donor')
+    if donor_id:
+        donor = Donor.objects.filter(pk=donor_id).first()
+
+    if request.method == 'POST':
+        form = StaffCertificateForm(request.POST)
+        if form.is_valid():
+            certificate = form.save()
+            # the form only gives us the donor and the period, so link the
+            # covered donations here - approval is what marks them as issued.
+            certificate.link_period_donations()
+            messages.add_message(request, messages.SUCCESS,
+                                 "Certificate created.")
+            return redirect('s18a.staff.detail', pk=certificate.pk)
+    else:
+        if donor:
+            certificate = S18ACertificate()
+            certificate.snapshot_from_donor(donor)
+            year = request.GET.get('tax_year')
+            if year:
+                certificate.build_from_tax_year(donor, int(year))
+            form = StaffCertificateForm(instance=certificate)
+        else:
+            form = StaffCertificateForm()
+
+    return render(request, 'donationPage/staff/certificate_form.html', {
+        'form': form,
+        'certificate': None,
+    })
+
+
+@login_required
+def staff_certificate_detail(request, pk):
+    _require_staff(request)
+    certificate = get_object_or_404(S18ACertificate, pk=pk)
+    if request.method == 'POST':
+        form = StaffCertificateForm(request.POST, instance=certificate)
+        if form.is_valid():
+            form.save()
+            messages.add_message(request, messages.SUCCESS, "Certificate updated.")
+            return redirect('s18a.staff.detail', pk=certificate.pk)
+    else:
+        form = StaffCertificateForm(instance=certificate)
+
+    # warn if the same donor already has another live certificate for this
+    # tax year, so we don't end up issuing two receipts for the same donations.
+    duplicates = []
+    if certificate.donor_id and certificate.tax_year:
+        duplicates = S18ACertificate.objects.filter(
+            donor=certificate.donor, tax_year=certificate.tax_year).exclude(
+                pk=certificate.pk).exclude(
+                    status=S18ACertificate.STATUS_REJECTED)
+
+    return render(request, 'donationPage/staff/certificate_detail.html', {
+        'form': form,
+        'certificate': certificate,
+        'duplicates': duplicates,
+    })
+
+
+@login_required
+def staff_certificate_pdf(request, pk):
+    _require_staff(request)
+    certificate = get_object_or_404(S18ACertificate, pk=pk)
+    return _certificate_pdf_response(
+        certificate, download=bool(request.GET.get('download')))
+
+
+@login_required
+def staff_certificate_approve(request, pk):
+    _require_staff(request)
+    certificate = get_object_or_404(S18ACertificate, pk=pk)
+    if request.method == 'POST':
+        if certificate.status == S18ACertificate.STATUS_REJECTED:
+            messages.add_message(request, messages.ERROR,
+                                 "Rejected certificates cannot be approved.")
+        else:
+            certificate.approve(request.user)
+            # approving doesn't send anything - staff pick the wording and
+            # send it from the "Email certificate" page.
+            messages.add_message(
+                request, messages.SUCCESS,
+                "Certificate approved. Receipt no. {} allocated. Nothing has "
+                "been sent yet — use Email to donor.".format(
+                    certificate.receipt_number))
+    return redirect('s18a.staff.detail', pk=pk)
+
+
+@login_required
+def staff_certificate_reject(request, pk):
+    _require_staff(request)
+    certificate = get_object_or_404(S18ACertificate, pk=pk)
+    if request.method == 'POST':
+        if certificate.status != S18ACertificate.STATUS_PENDING:
+            messages.add_message(
+                request, messages.ERROR,
+                "Issued certificates cannot be rejected. They require a "
+                "separate void-and-reissue workflow.")
+        else:
+            certificate.reject(request.POST.get('reason', ''))
+            messages.add_message(request, messages.INFO, "Certificate rejected.")
+    return redirect('s18a.staff.detail', pk=pk)
+
+
+@login_required
+def staff_certificate_email(request, pk):
+    """compose and send the donor's copy.
+
+    GET shows the standard email alongside an editable copy of it. POST
+    sends either the standard template or the edited version, depending on
+    which button got clicked. the PDF gets attached either way.
+    """
+    _require_staff(request)
+    certificate = get_object_or_404(S18ACertificate, pk=pk)
+
+    if not certificate.is_approved:
+        messages.add_message(request, messages.ERROR,
+                             "Approve the certificate before emailing it.")
+        return redirect('s18a.staff.detail', pk=pk)
+
+    standard_subject, standard_body = standard_certificate_email(certificate)
+    form = CertificateEmailForm(initial={'subject': standard_subject,
+                                         'message': standard_body})
+    subject, body = standard_subject, standard_body
+
+    def compose_page():
+        return render(request, 'donationPage/staff/certificate_email.html', {
+            'certificate': certificate,
+            'form': form,
+            'standard_subject': standard_subject,
+            'standard_body': standard_body,
+        })
+
+    if request.method != 'POST':
+        return compose_page()
+
+    if request.POST.get('mode') == 'custom':
+        form = CertificateEmailForm(request.POST)
+        if not form.is_valid():
+            return compose_page()
+        subject = form.cleaned_data['subject']
+        body = form.cleaned_data['message']
+
+    sent, error = send_certificate_email(certificate, subject, body)
+    if sent:
+        messages.add_message(
+            request, messages.SUCCESS,
+            "Certificate emailed to {}.".format(certificate.contact_email))
+        return redirect('s18a.staff.detail', pk=pk)
+
+    messages.add_message(request, messages.ERROR,
+                         "Could not send the certificate: {}".format(error))
+    return compose_page()

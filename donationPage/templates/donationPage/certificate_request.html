@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Request a Tax Certificate{{ block.super }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 40px auto; padding: 0 15px 60px;">
+
+  <h2>Section 18A Tax Certificate</h2>
+  <p class="text-muted">
+    South African taxpayers can claim a deduction for donations to a registered
+    Public Benefit Organisation. Choose a tax year and confirm your details below.
+    Our team will review the request and email your certificate once approved.
+  </p>
+  <hr>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-info">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="POST">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <div class="panel panel-default">
+      <div class="panel-heading"><strong>Tax year</strong></div>
+      <div class="panel-body">
+        <div class="form-group{% if form.tax_year.errors %} has-error{% endif %}">
+          <label for="{{ form.tax_year.id_for_label }}">{{ form.tax_year.label }}</label>
+          {{ form.tax_year }}
+          {% if form.tax_year.help_text %}<p class="help-block">{{ form.tax_year.help_text }}</p>{% endif %}
+          {% for error in form.tax_year.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel panel-default">
+      <div class="panel-heading"><strong>Your details</strong></div>
+      <div class="panel-body">
+
+        <div class="form-group{% if form.name.errors %} has-error{% endif %}">
+          <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+          {{ form.name }}
+          {% for error in form.name.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+        </div>
+
+        <div class="row">
+          <div class="col-sm-6">
+            <div class="form-group{% if form.trading_name.errors %} has-error{% endif %}">
+              <label for="{{ form.trading_name.id_for_label }}">{{ form.trading_name.label }}</label>
+              {{ form.trading_name }}
+              {% if form.trading_name.help_text %}<p class="help-block">{{ form.trading_name.help_text }}</p>{% endif %}
+              {% for error in form.trading_name.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group{% if form.nature_of_donor.errors %} has-error{% endif %}">
+              <label for="{{ form.nature_of_donor.id_for_label }}">{{ form.nature_of_donor.label }}</label>
+              {{ form.nature_of_donor }}
+              {% for error in form.nature_of_donor.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-sm-6">
+            <div class="form-group{% if form.id_type.errors %} has-error{% endif %}">
+              <label for="{{ form.id_type.id_for_label }}">{{ form.id_type.label }}</label>
+              {{ form.id_type }}
+              {% for error in form.id_type.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group{% if form.id_country.errors %} has-error{% endif %}">
+              <label for="{{ form.id_country.id_for_label }}">{{ form.id_country.label }}</label>
+              {{ form.id_country }}
+              {% if form.id_country.help_text %}<p class="help-block">{{ form.id_country.help_text }}</p>{% endif %}
+              {% for error in form.id_country.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-sm-6">
+            <div class="form-group{% if form.id_number.errors %} has-error{% endif %}">
+              <label for="{{ form.id_number.id_for_label }}">{{ form.id_number.label }}</label>
+              {{ form.id_number }}
+              {% for error in form.id_number.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group{% if form.date_of_birth.errors %} has-error{% endif %}">
+              <label for="{{ form.date_of_birth.id_for_label }}">{{ form.date_of_birth.label }}</label>
+              {{ form.date_of_birth }}
+              {% if form.date_of_birth.help_text %}<p class="help-block">{{ form.date_of_birth.help_text }}</p>{% endif %}
+              {% for error in form.date_of_birth.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-sm-6">
+            <div class="form-group{% if form.income_tax_ref.errors %} has-error{% endif %}">
+              <label for="{{ form.income_tax_ref.id_for_label }}">{{ form.income_tax_ref.label }}</label>
+              {{ form.income_tax_ref }}
+              {% for error in form.income_tax_ref.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-sm-6">
+            <div class="form-group{% if form.contact_number.errors %} has-error{% endif %}">
+              <label for="{{ form.contact_number.id_for_label }}">{{ form.contact_number.label }}</label>
+              {{ form.contact_number }}
+              {% for error in form.contact_number.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group{% if form.email.errors %} has-error{% endif %}">
+              <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+              {{ form.email }}
+              {% for error in form.email.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group{% if form.address.errors %} has-error{% endif %}">
+          <label for="{{ form.address.id_for_label }}">{{ form.address.label }}</label>
+          {{ form.address }}
+          {% for error in form.address.errors %}<p class="help-block">{{ error }}</p>{% endfor %}
+        </div>
+
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Submit Request</button>
+    <a href="{% url 'donor_dashboard' token %}" class="btn btn-default" style="margin-left: 8px;">Cancel</a>
+  </form>
+
+</div>
+{% endblock %}

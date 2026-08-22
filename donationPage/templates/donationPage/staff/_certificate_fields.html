@@ -1,0 +1,67 @@
+{# shared edit form for the StaffCertificateForm, used by the detail + create views. #}
+<style>
+  .s18a-form .s18a-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px; }
+  .s18a-form .full { grid-column: 1 / -1; }
+  @media (max-width: 640px) { .s18a-form .s18a-grid { grid-template-columns: 1fr; } }
+  .s18a-form .form-group { margin-bottom: 18px; }
+  .s18a-form label { font-weight: 600; color: #2c3e50; margin-bottom: 6px; display: block; }
+  .s18a-form .form-control,
+  .s18a-form select,
+  .s18a-form textarea,
+  .s18a-form input[type="text"],
+  .s18a-form input[type="email"],
+  .s18a-form input[type="number"],
+  .s18a-form input[type="date"] {
+    width: 100%;
+    border: 1.5px solid #d1d9e0;
+    border-radius: 8px;
+    padding: 10px 13px;
+    background: #fff;
+    font-size: 14px;
+    line-height: 1.5;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .s18a-form select {
+    padding-top: 9px;
+    padding-bottom: 9px;
+    height: auto;
+    min-height: 42px;
+  }
+  .s18a-form .form-control:focus,
+  .s18a-form select:focus,
+  .s18a-form textarea:focus {
+    border-color: #00b2f0;
+    box-shadow: 0 0 0 3px rgba(0,178,240,.12);
+    outline: none;
+  }
+  .s18a-form .help-block { font-size: 12.5px; color: #7b8794; }
+  .s18a-form .field-error { color: #c0392b; font-size: 13px; margin-top: 4px; display: block; }
+  .s18a-form .btn-save {
+    background: #00b2f0; color: #fff; border: none; padding: 12px 30px;
+    font-weight: 600; border-radius: 8px; font-size: 15px; margin-top: 6px;
+    transition: background .15s ease;
+  }
+  .s18a-form .btn-save:hover { background: #0095cc; }
+</style>
+
+<form method="post" class="s18a-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <div class="s18a-grid">
+    {% for field in form %}
+      <div class="form-group {% if field.name == 'address' or field.name == 'staff_notes' or field.name == 'donor' or field.name == 'donor_name' %}full{% endif %}">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<span class="help-block">{{ field.help_text }}</span>{% endif %}
+        {% for error in field.errors %}
+          <span class="field-error">{{ error }}</span>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <button type="submit" class="btn-save">Save</button>
+</form>
