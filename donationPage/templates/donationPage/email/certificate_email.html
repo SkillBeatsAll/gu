@@ -1,0 +1,8 @@
+{# html wrapper around the message body, whether it came from
+   certificate_email_body.txt or got edited by staff before sending. #}
+<!doctype html>
+<html>
+  <body style="font-family: Arial, sans-serif; color: #1a1a1a; line-height: 1.6;">
+    {{ body|linebreaks }}
+  </body>
+</html>
