@@ -54,46 +54,43 @@
     
     .donation-form-panel {
       background: #ffffff;
-      border: 1px solid #e1e8ed;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border: 1px solid #cde8f5;
     }
     .donation-form-panel .panel-heading {
       background: #00b2f0;
       color: white;
       border-bottom: none;
-      padding: 24px;
-      font-size: 20px;
-      font-weight: 600;
+      padding: 14px 18px;
+      font-size: 16px;
+      font-weight: 500;
     }
     .donation-form-panel .panel-body {
-      padding: 32px 28px;
+      padding: 18px 20px;
     }
     .donation-intro {
-      text-align: center;
-      margin-bottom: 32px;
-      padding: 20px;
-      background: #f8fafb;
-      border-radius: 6px;
-      border-left: 4px solid #00b2f0;
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      background: #f6fdff;
+      border: 1px solid #00b2f0;
+      border-radius: 4px;
+      color: #555;
+      font-size: 13.5px;
+      line-height: 1.5;
     }
-    .donation-intro p {
-      color: #495057;
-      line-height: 1.6;
-      margin: 0;
-    }
+    .donation-intro p { margin: 0; }
     .donation-form-row {
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
     .donation-form-row .form-control {
-      border: 1.5px solid #d1d9e0;
-      border-radius: 6px;
-      padding: 12px 14px;
-      transition: all 0.2s ease;
+      border: 1px solid #d1d9e0;
+      border-radius: 4px;
+      padding: 7px 10px;
+      transition: border-color 0.15s ease;
       background: #ffffff;
     }
     .donation-form-row .form-control:focus {
       border-color: #00b2f0;
-      box-shadow: 0 0 0 3px rgba(0, 178, 240, 0.1);
+      box-shadow: 0 0 0 2px rgba(0, 178, 240, 0.12);
       outline: none;
     }
     .donation-form-row .form-control:disabled,
@@ -103,79 +100,56 @@
       color: #6c757d;
     }
     .donation-form-row label {
-      font-weight: 600;
-      color: #2c3e50;
-      margin-bottom: 8px;
+      font-weight: 500;
+      color: #444;
+      margin-bottom: 4px;
       display: block;
+      font-size: 13.5px;
     }
     .radio-group {
       display: flex;
-      gap: 16px;
-      margin-top: 10px;
-      padding: 12px;
-      background: #f8fafb;
-      border-radius: 6px;
+      gap: 18px;
+      margin-top: 4px;
     }
     .radio-group label {
-      font-weight: 500;
+      font-weight: 400;
       display: flex;
       align-items: center;
       cursor: pointer;
       margin: 0;
-      padding: 8px 12px;
-      border-radius: 4px;
-      transition: background 0.2s ease;
-      color: #495057;
-    }
-    .radio-group label:hover {
-      background: #e9ecef;
+      color: #555;
+      font-size: 13.5px;
     }
     .radio-group input[type="radio"] {
-      margin-right: 8px;
+      margin-right: 5px;
       cursor: pointer;
-      width: 18px;
-      height: 18px;
     }
     .donation-submit-btn {
-      background: #000000;
+      background: #00b2f0;
       color: white;
       border: none;
-      padding: 14px 28px;
-      font-weight: 600;
-      border-radius: 6px;
-      width: 100%;
-      transition: all 0.2s ease;
-      margin-top: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      padding: 8px 22px;
+      font-weight: 500;
+      border-radius: 4px;
+      transition: background 0.15s ease;
+      margin-top: 6px;
     }
-    .donation-submit-btn:hover {
-      background: #1a1a1a;
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0,0,0,0.2);
-    }
-    .donation-submit-btn:disabled {
-      background: #95a5a6;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
+    .donation-submit-btn:hover { background: #0095cc; color: white; }
+    .donation-submit-btn:disabled { background: #95a5a6; cursor: not-allowed; }
     .amount-input-wrapper {
       position: relative;
     }
     .amount-input-wrapper::before {
       content: "R";
       position: absolute;
-      left: 14px;
+      left: 10px;
       top: 50%;
       transform: translateY(-50%);
-      color: #495057;
-      font-weight: 700;
+      color: #666;
       pointer-events: none;
     }
     .amount-input-wrapper .form-control {
-      padding-left: 38px;
-      font-weight: 600;
+      padding-left: 24px;
     }
     
     .form-divider {
@@ -228,16 +202,7 @@
     }
     
     @media (max-width: 767px) {
-      .donation-form-panel .panel-body {
-        padding: 24px 20px;
-      }
-      .radio-group {
-        flex-direction: column;
-        gap: 8px;
-      }
-      .radio-group label {
-        width: 100%;
-      }
+      .radio-group { flex-direction: column; gap: 6px; }
     }
   </style>
 
@@ -300,7 +265,7 @@
         <div class="col-xs-12">
           <h3 class="section-title">Make a Donation</h3>
         </div>
-        <div class="col-xs-12 col-md-8 col-md-offset-2">
+        <div class="col-xs-12">
           <div class="panel panel-default donation-form-panel">
             <div class="panel-heading">Support Independent Journalism</div>
             <div class="panel-body">
@@ -417,6 +382,86 @@
       </div>
     </div>
 {%endif%}
+    <!-- s18a tax certificates -->
+    <div class="row">
+      <div class="col-xs-12">
+        <h3 class="section-title">Tax Certificates</h3>
+      </div>
+      <div class="col-xs-12">
+        <div class="panel panel-default">
+          <div class="panel-body">
+            <p style="color:#495057;">
+              South African taxpayers can claim a tax deduction for donations to GroundUp,
+              a registered Public Benefit Organisation, under Section 18A of the Income Tax Act.
+            </p>
+            {% if can_request_certificate %}
+              <a href="{% url 'certificate_request' token %}" class="btn btn-primary">
+                Request S18A Tax Certificate
+              </a>
+            {% else %}
+              <p class="text-muted" style="margin-bottom:0;">
+                Once you have completed donations on record, you'll be able to request a
+                tax certificate here.
+              </p>
+            {% endif %}
+
+            {% if certificates %}
+              <div class="table-responsive" style="margin-top:18px;">
+                <table class="table table-striped table-bordered">
+                  <thead>
+                    <tr>
+                      <th>Receipt #</th>
+                      <th>Tax year</th>
+                      <th>Amount</th>
+                      <th>Requested</th>
+                      <th>Status</th>
+                      <th>Certificate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for cert in certificates %}
+                      <tr>
+                        <td>{{ cert.receipt_number|default:"—" }}</td>
+                        <td>{{ cert.tax_year|default:"—" }}</td>
+                        <td>{{ cert.amount_display }}</td>
+                        <td>{{ cert.requested_at|date:'Y-m-d' }}</td>
+                        <td>
+                          <span class="label
+                            {% if cert.status == 'approved' %}label-success
+                            {% elif cert.status == 'emailed' %}label-success
+                            {% elif cert.status == 'rejected' %}label-danger
+                            {% else %}label-warning{% endif %}">
+                            {% if cert.status == 'pending' %}Awaiting approval
+                            {% elif cert.status == 'approved' %}Approved
+                            {% elif cert.status == 'emailed' %}Emailed to you
+                            {% elif cert.status == 'rejected' %}Rejected
+                            {% else %}{{ cert.get_status_display }}{% endif %}
+                          </span>
+                          {% if cert.status == 'rejected' and cert.rejection_reason %}
+                            <div class="text-muted" style="font-size:12px; margin-top:4px;">
+                              {{ cert.rejection_reason }}
+                            </div>
+                          {% endif %}
+                        </td>
+                        <td>
+                          {% if cert.is_approved %}
+                            <a href="{% url 'certificate_pdf' cert.pk token %}"
+                               class="btn btn-default btn-xs">Download PDF</a>
+                          {% else %}
+                            <span class="text-muted">—</span>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="row">
       <div class="col-xs-12">
         <h3 class="section-title">Your Donations</h3>

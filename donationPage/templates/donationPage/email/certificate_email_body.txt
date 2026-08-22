@@ -1,0 +1,11 @@
+Dear {{ certificate.donor_name }},
+
+Thank you for your generous support of GroundUp.
+
+Please find attached your Section 18A donation tax certificate (receipt no. {{ certificate.receipt_number }}){% if certificate.tax_year %} for the {{ certificate.tax_year }} tax year{% endif %}. You can use this certificate to claim a tax deduction in terms of Section 18A of the Income Tax Act.
+
+If any of the details on the certificate are incorrect, please reply to this email and we will gladly assist.
+
+With thanks,
+The GroundUp Team
+www.groundup.org.za

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %} | Email S18A Certificate{% endblock %}
+
+{% block content %}
+  <div class="container" style="max-width:900px; margin:0 auto; padding:30px 15px 60px;">
+    <p><a href="{% url 's18a.staff.detail' certificate.pk %}">&larr; Back to certificate</a></p>
+
+    <h1>Email certificate
+      {% if certificate.receipt_number %}#{{ certificate.receipt_number }}{% endif %}</h1>
+
+    <p class="text-muted">
+      Sending to <strong>{{ certificate.contact_email|default:"— no email address on this certificate —" }}</strong>.
+      The certificate PDF is attached either way.
+      {% if certificate.emailed_at %}
+        Last sent {{ certificate.emailed_at|date:"j M Y H:i" }}.
+      {% endif %}
+    </p>
+
+    {% if messages %}{% for message in messages %}
+      <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}">{{ message }}</div>
+    {% endfor %}{% endif %}
+
+    {% if not certificate.contact_email %}
+      <div class="alert alert-warning">
+        This certificate has no donor email address. Add one on the
+        <a href="{% url 's18a.staff.detail' certificate.pk %}">certificate page</a> first.
+      </div>
+    {% endif %}
+
+    <style>
+      .email-panel .preview {
+        background:#f7f9fa; border:1px solid #e3e8ec; border-radius:8px;
+        padding:16px 18px; white-space:pre-wrap; font-size:14px; line-height:1.6;
+      }
+      .email-panel label { font-weight:600; color:#2c3e50; display:block; margin-bottom:6px; }
+      .email-panel .form-control, .email-panel textarea, .email-panel input[type="text"] {
+        width:100%; border:1.5px solid #d1d9e0; border-radius:8px;
+        padding:10px 13px; background:#fff; font-size:14px; line-height:1.5;
+      }
+      .email-panel .form-group { margin-bottom:18px; }
+      .email-panel .help-block { font-size:12.5px; color:#7b8794; }
+      .email-panel .field-error { color:#c0392b; font-size:13px; display:block; margin-top:4px; }
+    </style>
+
+    <!-- standard template -->
+    <div class="panel panel-default email-panel">
+      <div class="panel-heading"><strong>Standard email</strong></div>
+      <div class="panel-body">
+        <p><strong>Subject:</strong> {{ standard_subject }}</p>
+        <div class="preview">{{ standard_body }}</div>
+        <form method="post" style="margin-top:16px;">
+          {% csrf_token %}
+          <input type="hidden" name="mode" value="standard">
+          <button type="submit" class="btn btn-primary"
+                  {% if not certificate.contact_email %}disabled{% endif %}>
+            Send standard email
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- customised version -->
+    <div class="panel panel-default email-panel">
+      <div class="panel-heading"><strong>Customise this email</strong></div>
+      <div class="panel-body">
+        <p class="text-muted">
+          Edit the wording for this one send. The standard template is unchanged.
+        </p>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="mode" value="custom">
+          {% for field in form %}
+            <div class="form-group">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}<span class="help-block">{{ field.help_text }}</span>{% endif %}
+              {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+            </div>
+          {% endfor %}
+          <button type="submit" class="btn btn-success"
+                  {% if not certificate.contact_email %}disabled{% endif %}>
+            Send customised email
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}

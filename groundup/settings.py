@@ -462,6 +462,13 @@ if PAYFAST_TEST_MODE:
 else:
     PAYFAST_URL = "https://www.payfast.co.za"
 
+# first S18A donation receipt number to issue - carries on the existing
+# (hand-numbered) sequence, which last reached 331.
+S18A_RECEIPT_START = 332
+
+# address(es) notified when a donor requests an S18A certificate.
+S18A_STAFF_EMAILS = ["info@groundup.org.za"]
+
 
 from .local_settings import *
 

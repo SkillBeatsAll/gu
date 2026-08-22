@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+  <body style="font-family: Arial, sans-serif; color: #1a1a1a; line-height: 1.6;">
+    <p>A donor has requested a Section 18A tax certificate.</p>
+
+    {% if duplicate_of %}
+    <p style="color: #a94442;"><strong>Possible duplicate:</strong> this donor
+      already has certificate #{{ duplicate_of.pk }} for the same tax year
+      ({{ duplicate_of.get_status_display }}). Check before issuing a second
+      receipt for the same donations.</p>
+    {% endif %}
+
+    <table cellpadding="4" style="border-collapse: collapse;">
+      <tr><td><strong>Donor</strong></td><td>{{ certificate.donor_name }}</td></tr>
+      <tr><td><strong>Email</strong></td><td>{{ certificate.contact_email }}</td></tr>
+      {% if certificate.tax_year %}
+      <tr><td><strong>Tax year</strong></td><td>{{ certificate.tax_year }}</td></tr>
+      {% endif %}
+      <tr><td><strong>Amount</strong></td><td>{{ certificate.amount_display }}</td></tr>
+      <tr><td><strong>Period</strong></td><td>{{ certificate.date_of_donation_text }}</td></tr>
+    </table>
+
+    <p>Please review and approve it here:<br>
+      <a href="{{ detail_url }}">{{ detail_url }}</a></p>
+  </body>
+</html>
