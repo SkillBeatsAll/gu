@@ -42,7 +42,14 @@
     transition: background .15s ease;
   }
   .s18a-form .btn-save:hover { background: #0095cc; }
+  .s18a-required-marker { color: #c0392b; margin-left: 3px; }
+  .s18a-required-legend { font-size: 12.5px; color: #7b8794; margin-bottom: 14px; }
+  .s18a-form .donor-search { margin-bottom: 8px; }
 </style>
+
+<p class="s18a-required-legend">
+  Fields marked <span class="s18a-required-marker">*</span> are required.
+</p>
 
 <form method="post" class="s18a-form">
   {% csrf_token %}
@@ -53,7 +60,15 @@
   <div class="s18a-grid">
     {% for field in form %}
       <div class="form-group {% if field.name == 'address' or field.name == 'staff_notes' or field.name == 'donor' or field.name == 'donor_name' %}full{% endif %}">
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        <label for="{{ field.id_for_label }}">
+          {{ field.label }}{% if field.field.required %}<span class="s18a-required-marker" title="Required">*</span>{% endif %}
+        </label>
+        {% if field.name == 'donor' %}
+          <input type="search" id="s18a-donor-search" class="form-control donor-search"
+                 placeholder="Search donors by name or email&hellip;"
+                 aria-label="Search donors" autocomplete="off"
+                 {% if field.field.disabled %}disabled{% endif %}>
+        {% endif %}
         {{ field }}
         {% if field.help_text %}<span class="help-block">{{ field.help_text }}</span>{% endif %}
         {% for error in field.errors %}
@@ -65,3 +80,26 @@
 
   <button type="submit" class="btn-save">Save</button>
 </form>
+
+<script>
+  /* Filter the (surname-ordered) donor dropdown as staff type. Purely a
+     convenience: with JS off the full select still works. */
+  (function () {
+    var search = document.getElementById('s18a-donor-search');
+    var select = document.getElementById('{{ form.donor.id_for_label }}');
+    if (!search || !select) { return; }
+    var options = Array.prototype.slice.call(select.options);
+    search.addEventListener('input', function () {
+      var query = search.value.trim().toLowerCase();
+      options.forEach(function (option, index) {
+        // always keep the blank "no linked donor" choice and whatever is
+        // currently selected, so filtering can never silently drop it.
+        var keep = index === 0 || option.selected
+          || !query || option.text.toLowerCase().indexOf(query) !== -1;
+        option.hidden = !keep;
+        // Safari ignores `hidden` on an option, but honours `disabled`.
+        option.disabled = !keep;
+      });
+    });
+  })();
+</script>
