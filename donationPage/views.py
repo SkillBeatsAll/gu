@@ -11,6 +11,7 @@ from django.template.loader import render_to_string
 from django.core.paginator import Paginator
 from django.core.mail import send_mail, EmailMultiAlternatives
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
+from django.db.models import Q
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
@@ -627,6 +628,16 @@ def _filtered_certificates(request):
     year = _requested_tax_year(request)
     if year:
         certificates = certificates.filter(tax_year=year)
+    query = request.GET.get('q', '').strip()
+    if query:
+        matches = (Q(donor_name__icontains=query)
+                   | Q(surname__icontains=query)
+                   | Q(contact_email__icontains=query)
+                   | Q(donor__name__icontains=query)
+                   | Q(donor__email__icontains=query))
+        if query.isdigit():
+            matches = matches | Q(receipt_number=int(query))
+        certificates = certificates.filter(matches)
     return certificates
 
 
@@ -639,6 +650,7 @@ def staff_certificate_list(request):
         'page_obj': page_obj,
         'status': request.GET.get('status', ''),
         'status_choices': S18ACertificate.STATUS_CHOICES,
+        'q': request.GET.get('q', '').strip(),
         'tax_year': _requested_tax_year(request),
         'tax_years': S18ACertificate.objects.exclude(
             tax_year=None).values_list(
