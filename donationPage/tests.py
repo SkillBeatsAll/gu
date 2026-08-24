@@ -12,6 +12,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from . import sars
+from .forms import StaffCertificateForm
 from .models import Donor, Donation, Currency, S18ACertificate
 from .views import signer
 
@@ -754,3 +755,81 @@ class SarsCsvTests(PdfMockMixin, TestCase):
         resp = self.client.get(
             "/donation/donations/certificates/export.csv")
         self.assertEqual(resp.status_code, 404)
+
+
+class CertificateSearchTests(PdfMockMixin, TestCase):
+    """Staff searching the certificate list, and the donor dropdown."""
+
+    def setUp(self):
+        super().setUp()
+        self.staff = User.objects.create_user("staff", password="x")
+        self.staff.user_permissions.add(
+            Permission.objects.get(codename="change_s18acertificate"))
+        self.client.login(username="staff", password="x")
+        self.zulu = Donor.objects.create(
+            name="Thandi Zulu", email="thandi@example.com", donor_url="z")
+        self.abrahams = Donor.objects.create(
+            name="Riedwaan Abrahams", email="riedwaan@example.com",
+            donor_url="a")
+
+    def _cert(self, donor, **kwargs):
+        certificate = S18ACertificate(donor=donor, tax_year=2026,
+                                      amount=Decimal("100.00"))
+        certificate.snapshot_from_donor(donor)
+        for key, value in kwargs.items():
+            setattr(certificate, key, value)
+        certificate.save()
+        return certificate
+
+    def _search(self, query):
+        resp = self.client.get(
+            "/donation/donations/certificates/", {'q': query})
+        self.assertEqual(resp.status_code, 200)
+        return list(resp.context['page_obj'])
+
+    def test_search_matches_the_donor_name(self):
+        zulu = self._cert(self.zulu)
+        self._cert(self.abrahams)
+        self.assertEqual(self._search("zulu"), [zulu])
+
+    def test_search_matches_the_donor_email(self):
+        self._cert(self.zulu)
+        abrahams = self._cert(self.abrahams)
+        self.assertEqual(self._search("riedwaan@example.com"), [abrahams])
+
+    def test_search_matches_a_receipt_number(self):
+        zulu = self._cert(self.zulu)
+        zulu.approve(self.staff)
+        self._cert(self.abrahams)
+        self.assertEqual(self._search(str(zulu.receipt_number)), [zulu])
+
+    def test_search_survives_paging_and_the_export_link(self):
+        self._cert(self.zulu)
+        resp = self.client.get(
+            "/donation/donations/certificates/", {'q': "zulu"})
+        self.assertContains(resp, "export.csv?status=&amp;tax_year=&amp;q=zulu")
+
+    def test_no_search_leaves_the_list_alone(self):
+        certificates = {self._cert(self.zulu), self._cert(self.abrahams)}
+        self.assertEqual(set(self._search("")), certificates)
+
+    def test_donor_dropdown_is_ordered_by_surname(self):
+        form = StaffCertificateForm()
+        labels = [label for value, label in form.fields['donor'].choices
+                  if value]
+        self.assertEqual(labels, [
+            "Riedwaan Abrahams (riedwaan@example.com)",
+            "Thandi Zulu (thandi@example.com)",
+        ])
+
+    def test_a_donor_picked_from_the_dropdown_still_validates(self):
+        form = StaffCertificateForm({
+            'donor': self.zulu.pk,
+            'donor_name': self.zulu.name,
+            'amount': "100.00",
+            'nature_of_donation': "Cash (via EFT)",
+            'signatory_name': "Nathan Geffen",
+            'signatory_title': "Director",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['donor'], self.zulu)

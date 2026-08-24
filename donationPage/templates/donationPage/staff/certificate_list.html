@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %} | S18A Certificates{% endblock %}
+{% block title %}S18A Certificates{{ block.super }}{% endblock %}
 
 {% block content %}
   <div class="container" style="max-width:1100px; margin:0 auto; padding:30px 15px 60px;">
@@ -17,6 +17,15 @@
     {% endfor %}{% endif %}
 
     <form method="get" class="form-inline" style="margin:15px 0;">
+      <label for="q" class="sr-only">Search donors</label>
+      <input type="search" name="q" id="q" class="form-control" value="{{ q }}"
+             style="min-width:260px; margin-right:8px;"
+             placeholder="Search donor name, email or receipt no.">
+      <button type="submit" class="btn btn-default" style="margin-right:14px;">Search</button>
+      {% if q %}
+        <a href="?status={{ status }}&amp;tax_year={{ tax_year|default_if_none:"" }}"
+           class="btn btn-link" style="margin-right:14px;">Clear</a>
+      {% endif %}
       <label for="status">Filter:&nbsp;</label>
       <select name="status" id="status" class="form-control" onchange="this.form.submit()">
         <option value="">All statuses</option>
@@ -31,7 +40,7 @@
         {% endfor %}
       </select>
       <noscript><button type="submit" class="btn btn-default">Filter</button></noscript>
-      <a href="{% url 's18a.staff.csv' %}?status={{ status }}&amp;tax_year={{ tax_year|default_if_none:"" }}"
+      <a href="{% url 's18a.staff.csv' %}?status={{ status }}&amp;tax_year={{ tax_year|default_if_none:"" }}&amp;q={{ q|urlencode }}"
          class="btn btn-default" style="margin-left:8px;"
          title="Issued receipts matching the filters above, in the SARS submission layout">
         Export CSV for SARS
@@ -71,7 +80,9 @@
               <td>{% if c.requested_by_donor %}Donor{% else %}Staff{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="7" class="text-center">No certificates found.</td></tr>
+            <tr><td colspan="7" class="text-center">
+              {% if q %}No certificates match &ldquo;{{ q }}&rdquo;.{% else %}No certificates found.{% endif %}
+            </td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -80,11 +91,11 @@
     {% if page_obj.has_other_pages %}
       <nav class="text-center"><ul class="pagination pagination-sm">
         {% if page_obj.has_previous %}
-          <li><a href="?status={{ status }}&amp;tax_year={{ tax_year|default_if_none:"" }}&amp;page={{ page_obj.previous_page_number }}">&laquo;</a></li>
+          <li><a href="?status={{ status }}&amp;tax_year={{ tax_year|default_if_none:"" }}&amp;q={{ q|urlencode }}&amp;page={{ page_obj.previous_page_number }}">&laquo;</a></li>
         {% else %}<li class="disabled"><span>&laquo;</span></li>{% endif %}
         <li class="active"><span>{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
         {% if page_obj.has_next %}
-          <li><a href="?status={{ status }}&amp;tax_year={{ tax_year|default_if_none:"" }}&amp;page={{ page_obj.next_page_number }}">&raquo;</a></li>
+          <li><a href="?status={{ status }}&amp;tax_year={{ tax_year|default_if_none:"" }}&amp;q={{ q|urlencode }}&amp;page={{ page_obj.next_page_number }}">&raquo;</a></li>
         {% else %}<li class="disabled"><span>&raquo;</span></li>{% endif %}
       </ul></nav>
     {% endif %}

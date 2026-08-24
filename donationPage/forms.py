@@ -8,6 +8,19 @@ from . import models, utils
 from newsroom.settings import SEARCH_MAXLEN
 
 
+def surname_sort_key(name):
+    """Sort key that orders a full name by its last word.
+
+    The Donor model keeps a single name field, so the last whitespace
+    separated word is the best guess we have at a surname. Organisations
+    just sort on their last word, which is at least stable.
+    """
+    parts = (name or "").strip().split()
+    if not parts:
+        return ("", "")
+    return (parts[-1].lower(), " ".join(parts[:-1]).lower())
+
+
 class DonorForm(forms.ModelForm):
     email = forms.EmailField(required=True)
     name = forms.CharField(max_length=50)
@@ -137,6 +150,7 @@ class StaffCertificateForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['donor'].required = False
         self.fields['donor_name'].required = True
+        self._order_donors_by_surname()
 
         # A receipt number means this document has been issued and archived.
         # Ideally, this should not change after issue (SARS audits etc)
@@ -153,6 +167,21 @@ class StaffCertificateForm(forms.ModelForm):
             css = field.widget.attrs.get('class', '')
             if not isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs['class'] = (css + ' form-control').strip()
+
+    def _order_donors_by_surname(self):
+        """List the donor dropdown by surname, showing the email so staff can
+        tell two same-named donors apart (and search on it).
+
+        The ordering has to happen in Python: a Donor has one name field, so
+        there is no surname column for the database to sort on.
+        """
+        field = self.fields['donor']
+        donors = sorted(field.queryset, key=lambda d: surname_sort_key(d.name))
+        field.choices = [("", field.empty_label)] + [
+            (donor.pk, "{} ({})".format(donor.name, donor.email)
+             if donor.email else donor.name)
+            for donor in donors
+        ]
 
     def clean(self):
         cleaned = super().clean()
