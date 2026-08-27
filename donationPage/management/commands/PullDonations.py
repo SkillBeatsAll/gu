@@ -4,7 +4,9 @@ import random
 import pytz
 import re
 from django.core.mail import send_mail
+from django.core.signing import TimestampSigner
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils.html import strip_tags
 from datetime import datetime, timezone, timedelta
 from requests.auth import HTTPBasicAuth
@@ -14,6 +16,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.contrib.sites.models import Site
 from donationPage.utils import make_donorUrl
 
+signer = TimestampSigner()
+
 
 def handle_transaction(donor_email, donor_name, transaction_datetime, amount, currency_type, notified, count):
         count=count
@@ -21,7 +25,7 @@ def handle_transaction(donor_email, donor_name, transaction_datetime, amount, cu
             Cdonor=Donor.objects.get(email=donor_email)
         except:
         #create new donor entry if not, and set Cdonor value to newDonor data
-            url=make_donorUrl(transaction_datetime).replace("UTC","")
+            url=make_donorUrl()
             newDonor = Donor(email=donor_email, name=donor_name, display_name='Anonymous', donor_url=url)
             newDonor.save()
             Cdonor=newDonor
@@ -39,9 +43,14 @@ def handle_transaction(donor_email, donor_name, transaction_datetime, amount, cu
                 if is_valid_email(donor_email):
                     # Send the email with the unique link
                     subject = 'Thank you for your donation to GroundUp'
-                    email_url = site+"/donation/"+Cdonor.donor_url
-                    donation_url = site+"/donation/donations"
-                    message = render_to_string('donationPage/email_template.html', {'unique_link': email_url, 'donor_name': donor_name, 'donation_link': donation_url})
+                    # signed, time-limited link to the donor dashboard
+                    # (expires after 24 hours!! see donor_dashboard_view)
+                    dashboard_url = site + reverse(
+                        'donor_dashboard',
+                        kwargs={'token': signer.sign(Cdonor.donor_url)})
+                    access_url = site + reverse('donor_access')
+                    donation_url = site + reverse('donation.page')
+                    message = render_to_string('donationPage/email_template.html', {'unique_link': dashboard_url, 'donor_name': donor_name, 'donation_link': donation_url, 'access_link': access_url})
                     plain_message = strip_tags(message)
                 
                     send_mail(subject, plain_message, settings.DEFAULT_FROM_EMAIL, [donor_email], html_message=message)
