@@ -26,7 +26,7 @@ from blocks/puzzles.py.
                 {% endif %}
             </div>
             <h4 class="gup-hero__name">{% if crossword.placeholder %}Crosswords{% else %}{{ crossword.title }}{% endif %}</h4>
-            <p class="gup-hero__blurb">{% if crossword.description and not crossword.placeholder %}{{ crossword.description|truncatewords:22 }}{% else %}A cryptic-ish grid with a South African twist.{% endif %}</p>
+            <p class="gup-hero__blurb">{% if crossword.placeholder %}A cryptic-ish grid with a South African twist.{% else %}{% firstof crossword.short_description crossword.description|truncatewords:22 "A cryptic-ish grid with a South African twist." %}{% endif %}</p>
             <span class="gup-btn">{% if crossword.placeholder %}Browse the crosswords{% else %}Play the crossword{% endif %} &rarr;</span>
         </div>
     </a>
